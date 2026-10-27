@@ -1,0 +1,52 @@
+import { test, expect } from '@playwright/test';
+test('operation supports shooting, reloading, abilities, pause and returning to menu', async ({ page }) => {
+  const errors=[];page.on('pageerror', e=>errors.push(e.message));
+  await page.goto('/');
+  await expect(page.locator('h1')).toContainText('EVERY SHOT.');
+  await page.locator('#start').click();
+  await expect.poll(()=>page.evaluate(()=>!!document.pointerLockElement)).toBe(true);
+  await expect(page.locator('#hud')).toBeVisible();
+  await page.mouse.down();
+  await expect.poll(async()=>Number(await page.locator('#ammo').textContent()),{timeout:15000}).toBeLessThan(24);
+  await page.mouse.up();
+  const ammoBefore=Number(await page.locator('#ammo').textContent());
+  await page.keyboard.press('r');
+  await expect(page.locator('#reload-label')).toHaveText('RELOADING…');
+  await expect(page.locator('#ammo')).toHaveText('24',{timeout:20000});
+  expect(Number(await page.locator('#reserve').textContent())).toBe(120-(24-ammoBefore));
+  await page.keyboard.press('q');
+  await expect(page.locator('#pulse-ability')).toHaveClass('cooldown');
+  await expect(page.locator('#toast')).toContainText('5秒間');
+  await page.evaluate(()=>document.exitPointerLock());
+  await expect(page.locator('#pause')).toBeVisible();
+  const pausedTime=await page.locator('#timer').textContent();
+  await page.waitForTimeout(300);
+  await expect(page.locator('#timer')).toHaveText(pausedTime);
+  await page.locator('#resume').click();
+  await expect.poll(()=>page.evaluate(()=>!!document.pointerLockElement)).toBe(true);
+  await expect(page.locator('#pause')).toBeHidden();
+  await page.evaluate(()=>document.exitPointerLock());
+  await page.locator('#back').click();
+  await expect(page.locator('#menu')).toBeVisible();
+  await expect(page.locator('#hud')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+test('title screen fits a narrow viewport and sound can be toggled', async ({ page })=>{
+  await page.setViewportSize({width:390,height:844});await page.goto('/');
+  await expect(page.locator('#start')).toBeInViewport();
+  await page.locator('#sound').click();await expect(page.locator('#sound')).toHaveText('SOUND OFF');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+});
+test('aimed fire hits and eliminates a hostile in the 3D arena',async({page})=>{
+  await page.goto('/');
+  const start=await page.locator('#start').boundingBox();
+  await page.locator('#start').click();
+  await expect.poll(()=>page.evaluate(()=>!!document.pointerLockElement)).toBe(true);
+  // The eastern lane has a visible hostile. Turn toward it and aim at head height.
+  await page.mouse.move(start.x+start.width/2+45,start.y+start.height/2-1);
+  await page.mouse.down({button:'right'});
+  await page.mouse.down();
+  await expect(page.locator('#killfeed')).toContainText('HEADSHOT',{timeout:15000});
+  await page.mouse.up();await page.mouse.up({button:'right'});
+  await expect(page.locator('#killfeed')).toContainText('HOSTILE 02');
+});
