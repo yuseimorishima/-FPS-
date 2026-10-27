@@ -219,14 +219,17 @@ function resetRound(){
   spawns.slice(0,3+Math.min(state.round-1,3)).forEach(([x,z],i)=>makeEnemy(x,z,i));
   updateHUD();$('callout').style.opacity=1;
 }
+const touchDevice = matchMedia('(pointer: coarse)').matches;
+let touchLook = null;
 async function lockAndPlay(){
+  if(touchDevice){ state.mode='playing'; $('pause').hidden=true; return; }
   try {
     await canvas.requestPointerLock();
     if(document.pointerLockElement===canvas){state.mode='playing';$('pause').hidden=true;}
   }catch{toast('画面のクリックでマウス操作を許可してください');}
 }
 function begin(){
-  if(innerWidth<650){toast('このゲームはマウスとキーボードで操作します');}
+  if(touchDevice){toast('画面をドラッグして視点を動かせます');}
   Object.assign(state,{round:1,wins:0,losses:0,totalKills:0,shots:0,hits:0});
   $('menu').hidden=true;$('hud').hidden=false;$('result').hidden=true;
   document.body.classList.add('playing');gun.visible=true;resetRound();state.mode='paused';$('pause').hidden=false;
@@ -367,7 +370,7 @@ $('back').onclick=menu;$('result-back').onclick=menu;
 $('next').onclick=()=>{if(state.wins>=3||state.losses>=3)begin();else{state.round++;resetRound();$('result').hidden=true;state.mode='paused';$('pause').hidden=false;lockAndPlay();}};
 $('sound').onclick=()=>{sound=!sound;$('sound').innerHTML=`SOUND <span>${sound?'ON':'OFF'}</span>`;if(sound)tone(600,.1);};
 document.addEventListener('pointerlockchange',()=>{
-  if(document.pointerLockElement!==canvas&&state.mode==='playing'){
+  if(!touchDevice&&document.pointerLockElement!==canvas&&state.mode==='playing'){
     state.mode='paused';$('pause').hidden=false;shooting=false;aiming=false;keys.clear();
   }
 });
@@ -375,6 +378,32 @@ document.addEventListener('mousemove',e=>{
   if(state.mode!=='playing'||document.pointerLockElement!==canvas)return;
   yaw-=e.movementX*.002;pitch=THREE.MathUtils.clamp(pitch-e.movementY*.002,-1.3,1.3);
 });
+// A single touch on the arena controls the view; on-screen controls stay independent.
+canvas.addEventListener('pointerdown',e=>{
+  if(e.pointerType!=='touch'||state.mode!=='playing'||touchLook)return;
+  touchLook={id:e.pointerId,x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);e.preventDefault();
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!touchLook||touchLook.id!==e.pointerId||state.mode!=='playing')return;
+  yaw-=(e.clientX-touchLook.x)*.004;
+  pitch=THREE.MathUtils.clamp(pitch-(e.clientY-touchLook.y)*.004,-1.3,1.3);
+  touchLook.x=e.clientX;touchLook.y=e.clientY;e.preventDefault();
+});
+for(const name of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(name,e=>{
+  if(touchLook?.id===e.pointerId)touchLook=null;
+});
+for(const button of document.querySelectorAll('[data-move]')){
+  const key=button.dataset.move;
+  button.addEventListener('pointerdown',e=>{if(state.mode!=='playing')return;e.preventDefault();button.setPointerCapture(e.pointerId);keys.add(key);});
+  for(const name of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(name,()=>keys.delete(key));
+}
+const touchFire=$('touch-fire');
+touchFire.addEventListener('pointerdown',e=>{if(state.mode!=='playing')return;e.preventDefault();touchFire.setPointerCapture(e.pointerId);shooting=true;shoot();});
+for(const name of ['pointerup','pointercancel','lostpointercapture'])touchFire.addEventListener(name,()=>{shooting=false;});
+$('touch-pulse').onclick=()=>{if(state.mode==='playing')ability('pulse');};
+$('touch-heal').onclick=()=>{if(state.mode==='playing')ability('heal');};
+$('touch-reload').onclick=()=>{if(state.mode==='playing')reload();};
+$('touch-pause').onclick=()=>{if(state.mode==='playing'){state.mode='paused';shooting=false;keys.clear();$('pause').hidden=false;}};
 document.addEventListener('keydown',e=>{
   if(state.mode!=='playing')return;
   if(['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft'].includes(e.code))e.preventDefault();
