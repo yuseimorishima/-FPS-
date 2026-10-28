@@ -34,3 +34,5 @@ npm run dev
 ## ブラウザテスト
 
 `npm run test:e2e` で、実際の3D画面の起動・射撃・リロード・索敵・ポーズ・ヘッドショットを検証します。`/usr/bin/chromium` があればそれを利用します。ない環境では事前に `npx playwright install chromium` を実行してください。
+
+GitHub Pagesのブランチ公開とActions公開の両方に同じ完成版を配置するため、`npm run build` は `index.html`、`assets/`、`favicon.svg` も更新します。ゲームのHTMLを編集するときは `app.html` を編集し、ビルド後の生成ファイルも一緒にコミットしてください。開発サーバーの `/` は `app.html` を表示します。
